@@ -26,7 +26,7 @@ Instead of using traditional keyword-based methods, this system converts book de
 - **LangChain** for working with LLMs and chaining tasks.
 - **Pandas & NumPy** for data cleaning and handling.
 - **Vector Search** to find similar book descriptions quickly.
-- **flask api** to send data from backend to frontend.
+- **FastAPI** (migrated from Flask) to send data from backend to frontend.
 
 ---
 
@@ -38,7 +38,50 @@ Instead of using traditional keyword-based methods, this system converts book de
 4. Build a vector database to enable fast similarity searches.
 5. Classify books into topics using zero-shot learning.
 6. Analyze emotional tone in descriptions using fine-tuned models.
-7. and then sent the data to front-end from backend through flask api .
+7. and then sent the data to front-end from backend through FastAPI.
+
+---
+
+## 🚀 Running the Server
+
+### Development Mode
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the FastAPI server
+python run_server.py
+
+# Or using uvicorn directly
+uvicorn app.main:app --reload --host 0.0.0.0 --port 5000
+```
+
+### Production Mode
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 5000 --workers 4
+```
+
+### API Documentation
+
+Once the server is running, you can access:
+- **Swagger UI**: http://localhost:5000/docs
+- **ReDoc**: http://localhost:5000/redoc
+- **Health Check**: http://localhost:5000/health
+
+---
+
+## 📝 Migration from Flask to FastAPI
+
+This project has been migrated from Flask to FastAPI. The old Flask server (`api_server.py`) is kept for reference but is no longer used. All endpoints remain the same for backward compatibility with the frontend.
+
+### Key Changes:
+- ✅ Modern async/await support
+- ✅ Automatic API documentation
+- ✅ Type validation with Pydantic
+- ✅ Better performance
+- ✅ Same API endpoints (no frontend changes needed)
 
 ---
 
