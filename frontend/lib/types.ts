@@ -46,3 +46,31 @@ export interface SearchFilters {
   tone: Tone
   limit: number
 }
+
+export interface User {
+  id: number
+  username: string
+  email: string
+  profile_picture?: string
+  created_at?: string
+}
+
+export interface AuthResponse {
+  success: boolean
+  message: string
+  data: {
+    user: User
+    token: string
+  }
+}
+
+export interface LoginRequest {
+  username: string
+  password: string
+}
+
+export interface RegisterRequest {
+  username: string
+  email: string
+  password: string
+}

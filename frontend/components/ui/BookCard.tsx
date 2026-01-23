@@ -62,6 +62,7 @@ export default function BookCard({ book, index, onClick }: BookCardProps) {
             src={book.thumbnail || '/placeholder-book.jpg'}
             alt={book.title}
             fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
             className="object-cover group-hover:scale-105 transition-transform duration-300"
             onError={(e) => {
               const target = e.target as HTMLImageElement

@@ -56,25 +56,25 @@ export default function BookGrid({
   }
 
   return (
-    <section className="py-12">
+    <section className="py-8 md:py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-8"
+          transition={{ duration: 0.5 }}
+          className="text-center mb-8 md:mb-10"
         >
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">{title}</h2>
-          <p className="text-gray-600">
-            {subtitle} • {books.length} book{books.length !== 1 ? 's' : ''} found
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">{title}</h2>
+          <p className="text-gray-600 text-sm md:text-base">
+            {subtitle} {books.length > 0 && `• ${books.length} book${books.length !== 1 ? 's' : ''} found`}
           </p>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6"
         >
           {books.map((book, index) => (
             <BookCard

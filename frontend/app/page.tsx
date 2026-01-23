@@ -8,6 +8,7 @@ import { bookApi } from '@/lib/api'
 import Header from '@/components/ui/Header'
 import SearchBar from '@/components/ui/SearchBar'
 import BookGrid from '@/components/ui/BookGrid'
+import BookDetailsModal from '@/components/ui/BookDetailsModal'
 import Footer from '@/components/ui/Footer'
 
 export default function Home() {
@@ -20,6 +21,8 @@ export default function Home() {
     limit: 12
   })
   const [hasSearched, setHasSearched] = useState(false)
+  const [selectedBook, setSelectedBook] = useState<Book | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   // Load popular books on initial load
   useEffect(() => {
@@ -86,16 +89,18 @@ export default function Home() {
     }
     setFilters(updatedFilters)
     
-    // Re-search with new filters if we have a query
-    if (searchQuery.trim()) {
-      handleSearch(searchQuery)
-    }
-  }, [filters, searchQuery, handleSearch])
+    // Don't auto-search - user must click search button to apply filters
+  }, [filters])
 
   const handleBookClick = (book: Book) => {
-    // You can implement book details modal or navigation here
-    console.log('Book clicked:', book.title)
-    toast.success(`Selected: ${book.title}`)
+    setSelectedBook(book)
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    // Small delay before clearing book to allow exit animation
+    setTimeout(() => setSelectedBook(null), 300)
   }
 
   const getSectionTitle = () => {
@@ -111,64 +116,57 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-primary-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-primary-50/20">
       <Header />
       
       <main className="relative">
-        {/* Search Section */}
-        <section className="py-12 bg-white/60 backdrop-blur-sm">
+        {/* Search Section - More Prominent and Clean */}
+        <section className="py-6 md:py-10 bg-gradient-to-b from-white via-primary-50/20 to-transparent border-b border-gray-100">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="text-center mb-8"
+              transition={{ duration: 0.5 }}
             >
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-                Find Your Next Great Read
-              </h2>
-              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                Describe what you're looking for and let our AI find books that match your mood, 
-                interests, and reading preferences.
-              </p>
+              <SearchBar
+                onSearch={handleSearch}
+                onFilterChange={handleFilterChange}
+                isLoading={isLoading}
+              />
             </motion.div>
-
-            <SearchBar
-              onSearch={handleSearch}
-              onFilterChange={handleFilterChange}
-              isLoading={isLoading}
-            />
           </div>
         </section>
 
-        {/* Results Section */}
-        <BookGrid
-          books={books}
-          isLoading={isLoading}
-          onBookClick={handleBookClick}
-          title={getSectionTitle()}
-          subtitle={getSectionSubtitle()}
-        />
+        {/* Results Section - Improved Spacing */}
+        <section className="py-6 md:py-10">
+          <BookGrid
+            books={books}
+            isLoading={isLoading}
+            onBookClick={handleBookClick}
+            title={getSectionTitle()}
+            subtitle={getSectionSubtitle()}
+          />
+        </section>
 
-        {/* Features Section */}
-        <section className="py-16 bg-white">
+        {/* Features Section - More Subtle */}
+        <section className="py-12 md:py-16 bg-gradient-to-b from-transparent to-gray-50/50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="text-center mb-12"
+              className="text-center mb-10"
             >
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">
                 Why Choose BookWise?
               </h2>
-              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              <p className="text-base md:text-lg text-gray-600 max-w-2xl mx-auto">
                 Our advanced AI technology goes beyond simple keyword matching to understand 
                 the emotional and semantic content of books.
               </p>
             </motion.div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
               {[
                 {
                   icon: '🧠',
@@ -190,18 +188,25 @@ export default function Home() {
                   key={index}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: index * 0.2 }}
-                  className="text-center p-6 rounded-xl bg-gradient-to-br from-primary-50 to-secondary-50"
+                  transition={{ duration: 0.6, delay: index * 0.15 }}
+                  className="text-center p-6 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-100 hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
                 >
                   <div className="text-4xl mb-4">{feature.icon}</div>
                   <h3 className="text-xl font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                  <p className="text-gray-600">{feature.description}</p>
+                  <p className="text-gray-600 text-sm md:text-base leading-relaxed">{feature.description}</p>
                 </motion.div>
               ))}
             </div>
           </div>
         </section>
       </main>
+
+      {/* Book Details Modal */}
+      <BookDetailsModal
+        book={selectedBook}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+      />
 
       <Footer />
     </div>

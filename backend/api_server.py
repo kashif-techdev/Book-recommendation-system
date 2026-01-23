@@ -1,11 +1,82 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect, url_for
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from werkzeug.security import generate_password_hash, check_password_hash
 import pandas as pd
 import numpy as np
 import json
+import os
+from datetime import timedelta
+from sqlalchemy import inspect as sqlalchemy_inspect
+from models import db, User
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 app = Flask(__name__)
+
+# Configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///book_recommendation.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+app.config['GOOGLE_CLIENT_ID'] = os.getenv('GOOGLE_CLIENT_ID', '')
+
+# Initialize extensions
+db.init_app(app)
+jwt = JWTManager(app)
 CORS(app)  # Enable CORS for frontend communication
+
+# Create database tables
+with app.app_context():
+    # Check if tables exist, if not create them
+    # If they exist, check if we need to add new columns (for development)
+    try:
+        inspector = sqlalchemy_inspect(db.engine)
+        existing_tables = inspector.get_table_names()
+        
+        if 'users' in existing_tables:
+            # Check if google_id column exists
+            columns = [col['name'] for col in inspector.get_columns('users')]
+            if 'google_id' not in columns:
+                # Add missing columns using ALTER TABLE
+                print("Updating database schema...")
+                try:
+                    with db.engine.connect() as conn:
+                        conn.execute(db.text("ALTER TABLE users ADD COLUMN google_id VARCHAR(255)"))
+                        conn.execute(db.text("ALTER TABLE users ADD COLUMN profile_picture VARCHAR(500)"))
+                        conn.commit()
+                    # Try to create index (may fail if it exists)
+                    try:
+                        with db.engine.connect() as conn:
+                            conn.execute(db.text("CREATE INDEX ix_users_google_id ON users(google_id)"))
+                            conn.commit()
+                    except:
+                        pass  # Index might already exist
+                    print("Database schema updated with Google OAuth fields")
+                except Exception as e:
+                    print(f"Error updating schema: {e}")
+                    print("Dropping and recreating tables...")
+                    db.drop_all()
+                    db.create_all()
+                    print("Database recreated with updated schema")
+            else:
+                print("Database schema is up to date")
+        else:
+            # Create all tables if they don't exist
+            db.create_all()
+            print("Database initialized")
+    except Exception as e:
+        print(f"Error checking database schema: {e}")
+        # Fallback: create all tables
+        db.create_all()
+        print("Database initialized (fallback)")
 
 # Load books data
 try:
@@ -213,6 +284,285 @@ def health_check():
         'status': 'healthy',
         'books_loaded': len(books)
     })
+
+# Authentication Routes
+@app.route('/auth/register', methods=['POST'])
+def register():
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
+        
+        # Validation
+        if not username or not email or not password:
+            return jsonify({
+                'success': False,
+                'error': 'Username, email, and password are required'
+            }), 400
+        
+        if len(password) < 6:
+            return jsonify({
+                'success': False,
+                'error': 'Password must be at least 6 characters long'
+            }), 400
+        
+        # Check if user already exists
+        if User.query.filter_by(username=username).first():
+            return jsonify({
+                'success': False,
+                'error': 'Username already exists'
+            }), 400
+        
+        if User.query.filter_by(email=email).first():
+            return jsonify({
+                'success': False,
+                'error': 'Email already registered'
+            }), 400
+        
+        # Create new user
+        user = User(username=username, email=email)
+        user.set_password(password)
+        
+        db.session.add(user)
+        db.session.commit()
+        
+        # Create access token (identity must be a string)
+        access_token = create_access_token(identity=str(user.id))
+        
+        return jsonify({
+            'success': True,
+            'message': 'User registered successfully',
+            'data': {
+                'user': user.to_dict(),
+                'token': access_token
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in register: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/auth/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+        
+        if not username or not password:
+            return jsonify({
+                'success': False,
+                'error': 'Username and password are required'
+            }), 400
+        
+        # Find user by username or email
+        user = User.query.filter(
+            (User.username == username) | (User.email == username)
+        ).first()
+        
+        if not user or not user.check_password(password):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid username or password'
+            }), 401
+        
+        # Create access token (identity must be a string)
+        access_token = create_access_token(identity=str(user.id))
+        
+        return jsonify({
+            'success': True,
+            'message': 'Login successful',
+            'data': {
+                'user': user.to_dict(),
+                'token': access_token
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error in login: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/auth/me', methods=['GET'])
+@jwt_required()
+def get_current_user():
+    try:
+        user_id = get_jwt_identity()
+        
+        # Convert to int if it's a string (JWT identity should be string, but handle both)
+        if isinstance(user_id, str):
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid user ID in token'
+                }), 401
+        
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'User not found'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'user': user.to_dict()
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error in get_current_user: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/auth/logout', methods=['POST'])
+@jwt_required()
+def logout():
+    # With JWT, logout is handled client-side by removing the token
+    # This endpoint is here for consistency and future token blacklisting
+    return jsonify({
+        'success': True,
+        'message': 'Logged out successfully'
+    }), 200
+
+@app.route('/auth/google', methods=['POST'])
+def google_auth():
+    try:
+        data = request.get_json()
+        token = data.get('token', '')
+        
+        if not token:
+            return jsonify({
+                'success': False,
+                'error': 'Google token is required'
+            }), 400
+        
+        # Verify the Google ID token
+        google_client_id = app.config.get('GOOGLE_CLIENT_ID')
+        
+        if not google_client_id:
+            # If no client ID configured, use a simple token-based approach
+            # In production, you should always verify the token
+            try:
+                # Try to decode as JSON (for development/testing)
+                import base64
+                token_parts = token.split('.')
+                if len(token_parts) == 3:
+                    # This is a JWT-like token, but we'll use a simpler approach
+                    # For production, use proper Google token verification
+                    pass
+            except:
+                pass
+            
+            # For development: accept token and create user
+            # In production, you MUST verify the token with Google
+            return jsonify({
+                'success': False,
+                'error': 'Google OAuth not configured. Please set GOOGLE_CLIENT_ID environment variable.'
+            }), 400
+        
+        try:
+            # Verify the token with Google
+            idinfo = id_token.verify_oauth2_token(
+                token, 
+                google_requests.Request(), 
+                google_client_id
+            )
+            
+            # Get user info from Google
+            google_id = idinfo.get('sub')
+            email = idinfo.get('email')
+            name = idinfo.get('name', email.split('@')[0])
+            picture = idinfo.get('picture')
+            
+            if not google_id or not email:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid Google token'
+                }), 400
+            
+            # Check if user exists by Google ID
+            user = User.query.filter_by(google_id=google_id).first()
+            
+            if not user:
+                # Check if user exists by email (in case they registered with email first)
+                user = User.query.filter_by(email=email).first()
+                
+                if user:
+                    # Link Google account to existing user
+                    user.google_id = google_id
+                    user.profile_picture = picture
+                    db.session.commit()
+                else:
+                    # Create new user
+                    # Generate username from email or name
+                    base_username = name.lower().replace(' ', '_')
+                    username = base_username
+                    counter = 1
+                    
+                    # Ensure username is unique
+                    while User.query.filter_by(username=username).first():
+                        username = f"{base_username}_{counter}"
+                        counter += 1
+                    
+                    user = User(
+                        username=username,
+                        email=email,
+                        google_id=google_id,
+                        profile_picture=picture,
+                        password_hash=None  # No password for OAuth users
+                    )
+                    db.session.add(user)
+                    db.session.commit()
+            else:
+                # Update profile picture if changed
+                if picture and user.profile_picture != picture:
+                    user.profile_picture = picture
+                    db.session.commit()
+            
+            # Create access token (identity must be a string)
+            access_token = create_access_token(identity=str(user.id))
+            
+            return jsonify({
+                'success': True,
+                'message': 'Google authentication successful',
+                'data': {
+                    'user': user.to_dict(),
+                    'token': access_token
+                }
+            }), 200
+            
+        except ValueError as e:
+            # Invalid token
+            print(f"Google token verification error: {e}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid Google token'
+            }), 401
+            
+    except Exception as e:
+        print(f"Error in google_auth: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     print("Starting Book Recommendation API Server...")
