@@ -6,7 +6,7 @@ services:
     container_name: book-recommendation-db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: Hadi.123
       POSTGRES_DB: book_recommendation
     ports:
       - "5432:5432"
@@ -28,7 +28,7 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USERNAME: postgres
-      DB_PASSWORD: password
+      DB_PASSWORD: Hadi.123
       DB_DATABASE: book_recommendation
       JWT_SECRET: your-secret-key-change-in-production
       JWT_EXPIRES_IN: 7d

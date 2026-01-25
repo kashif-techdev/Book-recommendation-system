@@ -16,7 +16,7 @@
 
 ### 2. ML Service Prepared ✅
 - Hugging Face Space ready service
-- FastAPI + Gradio interface
+- FastAPI 
 - Book recommendation logic
 - Ready for deployment
 

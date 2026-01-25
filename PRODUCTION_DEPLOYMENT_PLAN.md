@@ -184,7 +184,7 @@ book-recommendation-system/
 ### Phase 3: ML Service Separation
 
 1. **Create Hugging Face Space**
-   - FastAPI/Gradio app
+   - FastAPI
    - Book recommendation logic
    - Embedding generation
    - Emotion analysis

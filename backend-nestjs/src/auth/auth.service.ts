@@ -51,14 +51,14 @@ export class AuthService {
     });
 
     // Generate JWT token
-    const token = this.generateToken(user.id);
+    const jwtToken = this.generateToken(user.id);
 
     return {
       success: true,
       message: 'User registered successfully',
       data: {
         user: this.usersService.toDto(user),
-        token,
+        token: jwtToken,
       },
     };
   }
@@ -83,20 +83,20 @@ export class AuthService {
     }
 
     // Generate JWT token
-    const token = this.generateToken(user.id);
+    const jwtToken = this.generateToken(user.id);
 
     return {
       success: true,
       message: 'Login successful',
       data: {
         user: this.usersService.toDto(user),
-        token,
+        token: jwtToken,
       },
     };
   }
 
   async googleAuth(googleAuthDto: GoogleAuthDto) {
-    const { token } = googleAuthDto;
+    const { token: googleToken } = googleAuthDto;
 
     if (!this.googleClient) {
       throw new BadRequestException('Google OAuth not configured');
@@ -105,7 +105,7 @@ export class AuthService {
     try {
       // Verify Google token
       const ticket = await this.googleClient.verifyIdToken({
-        idToken: token,
+        idToken: googleToken,
       });
 
       const payload = ticket.getPayload();
@@ -150,14 +150,14 @@ export class AuthService {
       }
 
       // Generate JWT token
-      const token = this.generateToken(user.id);
+      const jwtToken = this.generateToken(user.id);
 
       return {
         success: true,
         message: 'Google authentication successful',
         data: {
           user: this.usersService.toDto(user),
-          token,
+          token: jwtToken,
         },
       };
     } catch (error) {
