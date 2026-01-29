@@ -4,10 +4,20 @@ Complete guide for deploying the Book Recommendation System to production.
 
 ## 📋 Deployment Overview
 
-- **Frontend (Next.js)** → **Vercel**
-- **Backend (NestJS)** → **Render**
-- **ML Services** → **Hugging Face Spaces**
-- **Database** → **PostgreSQL** (Render / Supabase / Railway)
+| Component | Platform |
+|-----------|----------|
+| **Frontend (Next.js)** | Vercel |
+| **Backend (NestJS)** | Render |
+| **ML Services** | Hugging Face Spaces |
+| **Database** | PostgreSQL (Render / Supabase / Railway) |
+
+### Recommended deployment order
+
+1. **ML Service** (Hugging Face) — so backend can call it.
+2. **PostgreSQL** (Render or other) — so backend can connect.
+3. **Backend** (Render) — connect DB + ML URL.
+4. **Frontend** (Vercel) — set API URL to backend.
+5. **Google OAuth** — add production origins/redirects.
 
 ---
 ## 1️⃣ Deploy ML Service (Hugging Face Spaces)
@@ -75,104 +85,109 @@ curl -X POST https://kashifkhaan-book-recommendations.hf.space/recommend \
 
 ---
 
-## 2️⃣ Set Up PostgreSQL Database
+## 2️⃣ Set Up PostgreSQL Database (Do This First)
 
-### Option A: Render PostgreSQL
+Create the database **before** deploying the backend so you can link it or copy the URL.
 
-1. Go to https://render.com
+### Option A: Render PostgreSQL (recommended when using Render for backend)
+
+1. Go to https://render.com → **Dashboard**
 2. Click **"New +"** → **"PostgreSQL"**
 3. Configure:
    - **Name**: `book-recommendation-db`
    - **Database**: `book_recommendation`
-   - **User**: Auto-generated
-   - **Region**: Choose closest to your backend
-4. Copy the **Internal Database URL**
+   - **User**: (auto-generated)
+   - **Region**: Same as your backend (e.g. **Oregon (US West)** or **Frankfurt (EU Central)**)
+   - **Plan**: Free or Starter
+4. Click **"Create Database"**
+5. When ready, open the DB → **Info** tab:
+   - Copy **Internal Database URL** (use this for the backend on Render; format: `postgresql://user:password@hostname:5432/dbname`)
+
+The backend supports **DATABASE_URL** (single connection string). If you use another provider, you can set **DB_HOST**, **DB_PORT**, **DB_USERNAME**, **DB_PASSWORD**, **DB_DATABASE** instead.
 
 ### Option B: Supabase
 
-1. Go to https://supabase.com
-2. Create a new project
-3. Go to **Settings** → **Database**
-4. Copy the **Connection string**
+1. Go to https://supabase.com → create a project
+2. **Settings** → **Database** → **Connection string** (URI)
+3. Use that as **DATABASE_URL**, or copy host/port/user/password/database into **DB_*** env vars
 
 ### Option C: Railway
 
-1. Go to https://railway.app
-2. Create new project
-3. Add PostgreSQL service
-4. Copy the connection string
+1. Go to https://railway.app → new project → add **PostgreSQL**
+2. Copy the connection URL and set **DATABASE_URL** (or **DB_***) in your backend env
 
 ---
 
-## 3️⃣ Deploy Backend (Render)
+## 3️⃣ Deploy Backend (NestJS) on Render
 
-### Step 1: Prepare Repository
+**Order:** Deploy backend **after** the database is created so you can set **DATABASE_URL** (or **DB_***) from the DB dashboard.
 
-1. Ensure `backend-nestjs/` is in your GitHub repository
-2. Verify all files are committed
+### Step 1: Prepare repository
 
-### Step 2: Create Render Service
+1. Push `backend-nestjs/` to your GitHub repository (monorepo root = repo root).
+2. Ensure `backend-nestjs/package.json`, `backend-nestjs/src/`, and `backend-nestjs/tsconfig.json` are committed.
 
-1. Go to https://render.com
+### Step 2: Create Web Service on Render
+
+1. Go to https://render.com → **Dashboard**
 2. Click **"New +"** → **"Web Service"**
-3. Connect your GitHub repository
-4. Select the repository
+3. Connect your **GitHub** account if needed, then **select the repository** that contains `backend-nestjs/`.
+4. Click **"Connect"** (not "Create Web Service" yet — configure first).
 
-### Step 3: Configure Build
+### Step 3: Configure build & deploy (important for monorepo)
 
-- **Name**: `book-recommendation-backend`
-- **Environment**: `Node`
-- **Build Command**: `cd backend-nestjs && npm install && npm run build`
-- **Start Command**: `cd backend-nestjs && npm run start:prod`
-- **Root Directory**: Leave empty (or set to `backend-nestjs` if needed)
+| Setting | Value |
+|--------|--------|
+| **Name** | `book-recommendation-backend` (or any name) |
+| **Region** | Same as your PostgreSQL (e.g. Oregon or Frankfurt) |
+| **Root Directory** | `backend-nestjs` |
+| **Environment** | `Node` |
+| **Build Command** | `npm install && npm run build` |
+| **Start Command** | `npm run start:prod` |
 
-### Step 4: Set Environment Variables
+- **Root Directory** must be `backend-nestjs` so Render runs all commands inside that folder and only redeploys when files there change.
+- **Do not set PORT** — Render sets `PORT` automatically; the app uses `process.env.PORT || 3000`.
 
-Add these environment variables in Render:
+### Step 4: Set environment variables
 
-```env
-# Database
-DATABASE_URL=postgresql://user:password@host:5432/dbname
-DB_HOST=your-db-host
-DB_PORT=5432
-DB_USERNAME=your-db-user
-DB_PASSWORD=your-db-password
-DB_DATABASE=book_recommendation
+In the same **Create Web Service** (or later **Environment** tab), add:
 
-# JWT
-JWT_SECRET=your-very-secure-secret-key-min-32-chars
-JWT_EXPIRES_IN=7d
+| Key | Value | Required |
+|-----|--------|----------|
+| **DATABASE_URL** | `postgresql://user:password@host:5432/book_recommendation` (from Render PostgreSQL **Internal** URL) | Yes (or use DB_* below) |
+| **NODE_ENV** | `production` | Yes |
+| **JWT_SECRET** | A long random string (e.g. 32+ chars) | Yes |
+| **JWT_EXPIRES_IN** | `7d` | Optional |
+| **ML_SERVICE_URL** | `https://kashifkhaan-book-recommendations.hf.space` (your Hugging Face Space) | Yes |
+| **CORS_ORIGIN** | `https://your-frontend.vercel.app` (or `*` for testing) | Yes |
+| **GOOGLE_CLIENT_ID** | Your Google OAuth client ID | If using Google login |
+| **GOOGLE_CLIENT_SECRET** | Your Google OAuth client secret | If using Google login |
 
-# Google OAuth
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
+**Database:** If you use **Render PostgreSQL**, paste the **Internal Database URL** as **DATABASE_URL** and leave **DB_HOST**, **DB_PORT**, etc. unset.  
+If you use another provider without a single URL, set **DB_HOST**, **DB_PORT**, **DB_USERNAME**, **DB_PASSWORD**, **DB_DATABASE** instead.
 
-# ML Service
-ML_SERVICE_URL=https://your-username-book-recommendations.hf.space
+### Step 5: Instance and health check (optional)
 
-# Server
-PORT=3000
-NODE_ENV=production
+- **Instance Type**: Free or Starter (Free tier spins down after inactivity; first request may be slow.)
+- **Health Check Path** (if available): `/health` — Render can use this to confirm the app is up.
 
-# CORS
-CORS_ORIGIN=https://your-frontend.vercel.app
-```
+### Step 6: Deploy
 
-### Step 5: Deploy
+1. Click **"Create Web Service"**.
+2. Wait for the build (install + `npm run build`) and deploy.
+3. Copy your service URL (e.g. `https://book-recommendation-backend.onrender.com`).
 
-1. Click **"Create Web Service"**
-2. Wait for build and deployment
-3. Copy your backend URL (e.g., `https://book-recommendation-backend.onrender.com`)
-
-### Step 6: Verify Deployment
+### Step 7: Verify deployment
 
 ```bash
-# Test health endpoint
+# Health (API + ML service status)
 curl https://your-backend.onrender.com/health
 
-# Test API docs
-# Visit: https://your-backend.onrender.com/api
+# API docs (Swagger)
+# Open in browser: https://your-backend.onrender.com/api
 ```
+
+If **health** returns `mlService: "unhealthy"`, check **ML_SERVICE_URL** and that the Hugging Face Space is running. If the app fails to start, check **Logs** in Render for DB connection or env errors.
 
 ---
 
