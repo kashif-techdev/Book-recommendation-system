@@ -10,43 +10,65 @@ Complete guide for deploying the Book Recommendation System to production.
 - **Database** → **PostgreSQL** (Render / Supabase / Railway)
 
 ---
-
 ## 1️⃣ Deploy ML Service (Hugging Face Spaces)
+
+The ML service is a **FastAPI-only** API (no Gradio UI). It uses **pandas/numpy** for semantic book search (string matching and scoring), not deep learning models.
+
+### Do I need a GPU?
+
+**No. Use CPU only.**  
+This service does not run neural networks or heavy ML inference. Recommendations are computed with pandas/numpy over a CSV dataset. **CPU basic** on Hugging Face is sufficient and keeps the Space free or low-cost. Do not select a GPU tier.
+
+---
 
 ### Step 1: Prepare ML Service
 
 1. Navigate to `ml-services/book-recommendations/`
-2. Ensure `books_with_emotions.csv` is in the directory
-3. Verify `app.py` and `requirements.txt` are correct
+2. Ensure these files are present:
+   - `Dockerfile`
+   - `app.py`
+   - `requirements.txt`
+   - `books_with_emotions.csv`
 
 ### Step 2: Create Hugging Face Space
 
 1. Go to https://huggingface.co/spaces
 2. Click **"Create new Space"**
 3. Configure:
-   - **SDK**: Choose "Gradio" or "Docker"
+   - **SDK**: **Docker** (required — this is an API-only FastAPI app, not a Gradio app)
    - **Name**: `book-recommendations` (or your preferred name)
    - **Visibility**: Public or Private
-   - **Hardware**: CPU (or GPU if needed)
+   - **Hardware**: **CPU basic** — no GPU needed
 
 ### Step 3: Upload Files
 
-Upload these files to your Space:
-- `app.py`
-- `requirements.txt`
-- `books_with_emotions.csv` (or use Hugging Face Datasets)
+Upload **all** of these files to the root of your Space (so the Dockerfile is at the root):
+
+| File | Purpose |
+|------|--------|
+| `Dockerfile` | Tells Hugging Face how to build and run the container (Python 3.11, uvicorn on port 7860) |
+| `app.py` | FastAPI application |
+| `requirements.txt` | Python dependencies (fastapi, uvicorn, pandas, numpy, etc.) |
+| `books_with_emotions.csv` | Book dataset (required at runtime) |
+
+You can upload via the Space’s **Files** tab or by pushing to a repo connected to the Space.
 
 ### Step 4: Deploy
 
-1. Hugging Face will automatically build and deploy
-2. Wait for deployment to complete
-3. Copy your Space URL (e.g., `https://your-username-book-recommendations.hf.space`)
+1. Hugging Face builds the image from your `Dockerfile` and deploys the Space.
+2. Wait for the build to finish (check the **Logs** tab).
+3. Copy your Space URL (e.g. `https://your-username-book-recommendations.hf.space`).
+
+The app listens on **port 7860** (Hugging Face expects this for Docker Spaces).
 
 ### Step 5: Test ML Service
 
 ```bash
-# Test the endpoint
-curl -X POST https://your-username-book-recommendations.hf.space/recommend \
+# Health check
+curl https://kashifkhaan-book-recommendations.hf.space/health
+
+# Recommendations (POST)
+curl -X POST https://kashifkhaan-book-recommendations.hf.space/recommend \
   -H "Content-Type: application/json" \
   -d '{"query": "mystery", "category": "All", "tone": "All", "limit": 10}'
 ```
@@ -247,9 +269,10 @@ NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id
 - Ensure SSL is enabled for production
 
 **ML Service Timeout**
-- Check ML service URL is correct
-- Verify Hugging Face Space is running
-- Increase timeout in `ml-integration.service.ts`
+- Check ML service URL is correct (no trailing slash)
+- Verify Hugging Face Space is running (free CPU Spaces may sleep; first request can be slow)
+- Increase timeout in `ml-integration.service.ts` if needed
+- Use **CPU basic** hardware; GPU is not required for this service
 
 ### Frontend Issues
 

@@ -34,7 +34,7 @@ services:
       JWT_EXPIRES_IN: 7d
       PORT: 3000
       CORS_ORIGIN: http://localhost:3000
-      ML_SERVICE_URL: http://localhost:8000
+      ML_SERVICE_URL: https://kashifkhaan-book-recommendations.hf.space
     ports:
       - "3000:3000"
     depends_on:

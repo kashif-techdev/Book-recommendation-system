@@ -62,8 +62,8 @@ JWT_EXPIRES_IN=7d
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
-# ML Service (optional for now - we'll test without it first)
-ML_SERVICE_URL=http://localhost:8000
+# ML Service (use your deployed Hugging Face Space for full testing)
+ML_SERVICE_URL=https://kashifkhaan-book-recommendations.hf.space
 
 # Server
 PORT=3000
@@ -92,35 +92,43 @@ Database initialized
 
 ### Step 5: Test the API Endpoints
 
-#### Test 1: Health Check
+Use these tests to verify **backend**, **database** (user data, search history), and **ML service** integration.
+
+**Base URL:** `http://localhost:3000` (or your backend URL)
+
+---
+
+#### Test 1: Health Check (API + ML Service)
 
 ```bash
-# Open new terminal/command prompt
 curl http://localhost:3000/health
 ```
 
-**Expected response:**
+**Expected (with ML service URL set and Space running):**
 ```json
 {
   "status": "healthy",
   "timestamp": "2026-01-24T...",
   "services": {
     "api": "healthy",
-    "mlService": "unhealthy"
+    "mlService": "healthy"
   }
 }
 ```
 
+If `mlService` is `"unhealthy"`, check `ML_SERVICE_URL` in `.env` and that the Hugging Face Space is running.
+
+---
+
 #### Test 2: API Documentation
 
-Open in browser:
-```
-http://localhost:3000/api
-```
+Open in browser: **http://localhost:3000/api**
 
-You should see Swagger UI with all available endpoints.
+You should see Swagger UI with all endpoints (auth, books, search-history, health).
 
-#### Test 3: Register a User
+---
+
+#### Test 3: Register a User (Database: `users` table)
 
 ```bash
 curl -X POST http://localhost:3000/auth/register \
@@ -146,9 +154,11 @@ curl -X POST http://localhost:3000/auth/register \
 }
 ```
 
-**Save the token from the response!**
+**Save the token** from `data.token` for the next tests. If you re-run tests, use a new username/email or use login (Test 4) instead of register again.
 
-#### Test 4: Login
+---
+
+#### Test 4: Login (Database: verify user exists)
 
 ```bash
 curl -X POST http://localhost:3000/auth/login \
@@ -156,13 +166,21 @@ curl -X POST http://localhost:3000/auth/login \
   -d "{\"username\":\"testuser\",\"password\":\"password123\"}"
 ```
 
-**Expected response:** Similar to register, with token.
+**Expected:** Same shape as register (user + token). Use this token if you already registered.
 
-#### Test 5: Get Current User (Protected Endpoint)
+---
+
+#### Test 5: Get Current User (Protected — user data from DB)
+
+Use **GET /auth/me** or **GET /profile** (same response).
 
 ```bash
 # Replace YOUR_TOKEN with the token from register/login
 curl -X GET http://localhost:3000/auth/me \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Or use profile (alias)
+curl -X GET http://localhost:3000/profile \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -182,15 +200,18 @@ curl -X GET http://localhost:3000/auth/me \
 }
 ```
 
-#### Test 6: Get Search History
+If you get `401 Unauthorized`, the token is missing or invalid.
+
+---
+
+#### Test 6: Get Search History (Database: `search_history` table — initially empty)
 
 ```bash
-# Replace YOUR_TOKEN with your token
 curl -X GET http://localhost:3000/search-history \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-**Expected response:**
+**Expected (before any recommendations):**
 ```json
 {
   "success": true,
@@ -200,19 +221,127 @@ curl -X GET http://localhost:3000/search-history \
 }
 ```
 
-#### Test 7: Book Recommendations (Requires ML Service)
+---
 
-**Note:** This will fail if ML service is not running. That's expected.
+#### Test 7: Book Recommendations (ML service + saves search history to DB)
+
+**Requires:** `ML_SERVICE_URL` set to your Hugging Face Space (e.g. `https://kashifkhaan-book-recommendations.hf.space`).
 
 ```bash
-# Replace YOUR_TOKEN with your token
 curl -X POST http://localhost:3000/books/recommend \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"query\":\"mystery\",\"category\":\"All\",\"tone\":\"All\",\"limit\":10}"
 ```
 
-**Expected:** Error about ML service (since it's not running yet)
+**Expected response:** JSON with `books`, `total`, etc. from the ML service. The backend also **saves this search to the database** (search history).
+
+---
+
+#### Test 8: Get Search History Again (verify history was saved)
+
+```bash
+curl -X GET http://localhost:3000/search-history \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Expected (after Test 7):** `data.history` contains at least one entry, e.g.:
+
+```json
+{
+  "success": true,
+  "data": {
+    "history": [
+      {
+        "id": 1,
+        "userId": 1,
+        "query": "mystery",
+        "category": "All",
+        "tone": "All",
+        "resultsCount": 10,
+        "createdAt": "2026-01-24T..."
+      }
+    ]
+  }
+}
+```
+
+This confirms **user data and search history are stored and retrieved correctly** from PostgreSQL.
+
+---
+
+#### Test 9: Delete One Search History Entry
+
+```bash
+# Replace 1 with the actual id from history (e.g. from Test 8)
+curl -X DELETE http://localhost:3000/search-history/1 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Expected:** `{ "success": true, "message": "Search history deleted" }`
+
+---
+
+#### Test 10: Delete All Search History
+
+```bash
+curl -X DELETE http://localhost:3000/search-history \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Expected:** `{ "success": true, "message": "All search history deleted" }`
+
+Then `GET /search-history` should return `history: []`.
+
+---
+
+#### Test 11: Popular Books (no auth required)
+
+```bash
+curl http://localhost:3000/books/popular
+```
+
+**Expected:** JSON with popular books from the ML service (same shape as recommendations).
+
+---
+
+## 🗄️ Database Verification (PostgreSQL)
+
+After running the tests above, you can verify that **user data** and **search history** are stored correctly in the database.
+
+### Connect to the database
+
+**Docker:**
+```bash
+docker exec -it book-recommendation-db psql -U postgres -d book_recommendation
+```
+
+**Local PostgreSQL:**
+```bash
+psql -h localhost -U postgres -d book_recommendation
+```
+
+### Check users table
+
+```sql
+SELECT id, username, email, "createdAt" FROM "user";
+```
+
+**Expected:** At least one row (e.g. `testuser`, `test@example.com`). This confirms registration and login are persisting user data.
+
+### Check search_history table
+
+```sql
+SELECT id, "userId", query, category, tone, "resultsCount", "createdAt" FROM search_history ORDER BY "createdAt" DESC;
+```
+
+**Expected:** After Test 7 (recommend), you should see at least one row with your `query` (e.g. `mystery`), `userId` matching your user, and `resultsCount`. After Test 9/10 (delete), rows may be empty.
+
+### Exit psql
+
+```sql
+\q
+```
 
 ---
 
@@ -222,36 +351,51 @@ Save this as `test-api.sh` (Linux/Mac) or `test-api.ps1` (Windows):
 
 ### Windows PowerShell (`test-api.ps1`)
 
+This script tests health, auth, user data, search history, book recommendations (ML), and history delete.
+
 ```powershell
-# Test API Endpoints
+# Backend + DB + ML Test Script
 $baseUrl = "http://localhost:3000"
 
-Write-Host "1. Testing Health Check..." -ForegroundColor Green
-Invoke-WebRequest -Uri "$baseUrl/health" -UseBasicParsing | Select-Object -ExpandProperty Content
+Write-Host "1. Health Check (API + ML)..." -ForegroundColor Green
+(Invoke-WebRequest -Uri "$baseUrl/health" -UseBasicParsing).Content | ConvertFrom-Json | ConvertTo-Json -Depth 5
 
-Write-Host "`n2. Testing User Registration..." -ForegroundColor Green
-$registerBody = @{
-    username = "testuser"
-    email = "test@example.com"
-    password = "password123"
-} | ConvertTo-Json
-
-$registerResponse = Invoke-WebRequest -Uri "$baseUrl/auth/register" -Method POST -Body $registerBody -ContentType "application/json" -UseBasicParsing
+Write-Host "`n2. Register User (DB: users)..." -ForegroundColor Green
+$registerBody = @{ username = "testuser"; email = "test@example.com"; password = "password123" } | ConvertTo-Json
+try {
+    $registerResponse = Invoke-WebRequest -Uri "$baseUrl/auth/register" -Method POST -Body $registerBody -ContentType "application/json" -UseBasicParsing
+} catch {
+    # If user exists, login instead
+    Write-Host "User may exist, trying login..." -ForegroundColor Yellow
+    $loginBody = @{ username = "testuser"; password = "password123" } | ConvertTo-Json
+    $registerResponse = Invoke-WebRequest -Uri "$baseUrl/auth/login" -Method POST -Body $loginBody -ContentType "application/json" -UseBasicParsing
+}
 $registerData = $registerResponse.Content | ConvertFrom-Json
 $token = $registerData.data.token
+Write-Host "Token: $($token.Substring(0, 30))..." -ForegroundColor Yellow
 
-Write-Host "Token received: $($token.Substring(0, 20))..." -ForegroundColor Yellow
+Write-Host "`n3. Get Current User (auth/me)..." -ForegroundColor Green
+$headers = @{ "Authorization" = "Bearer $token" }
+(Invoke-WebRequest -Uri "$baseUrl/auth/me" -Headers $headers -UseBasicParsing).Content | ConvertFrom-Json | ConvertTo-Json -Depth 5
 
-Write-Host "`n3. Testing Get Current User..." -ForegroundColor Green
-$headers = @{
-    "Authorization" = "Bearer $token"
-}
-Invoke-WebRequest -Uri "$baseUrl/auth/me" -Headers $headers -UseBasicParsing | Select-Object -ExpandProperty Content
+Write-Host "`n4. Search History (empty at first)..." -ForegroundColor Green
+(Invoke-WebRequest -Uri "$baseUrl/search-history" -Headers $headers -UseBasicParsing).Content | ConvertFrom-Json | ConvertTo-Json -Depth 5
 
-Write-Host "`n4. Testing Search History..." -ForegroundColor Green
-Invoke-WebRequest -Uri "$baseUrl/search-history" -Headers $headers -UseBasicParsing | Select-Object -ExpandProperty Content
+Write-Host "`n5. Book Recommendations (ML + saves history)..." -ForegroundColor Green
+$recommendBody = @{ query = "mystery"; category = "All"; tone = "All"; limit = 5 } | ConvertTo-Json
+$rec = Invoke-WebRequest -Uri "$baseUrl/books/recommend" -Method POST -Headers $headers -Body $recommendBody -ContentType "application/json" -UseBasicParsing
+$recData = $rec.Content | ConvertFrom-Json
+Write-Host "Recommendations count: $($recData.data.total)" -ForegroundColor Yellow
 
-Write-Host "`n✅ All tests completed!" -ForegroundColor Green
+Write-Host "`n6. Search History again (should have entry)..." -ForegroundColor Green
+$history = (Invoke-WebRequest -Uri "$baseUrl/search-history" -Headers $headers -UseBasicParsing).Content | ConvertFrom-Json
+$history.data.history | ConvertTo-Json -Depth 3
+if ($history.data.history -and $history.data.history.Count -gt 0) { Write-Host "History saved to DB: OK" -ForegroundColor Green }
+
+Write-Host "`n7. Popular Books (no auth)..." -ForegroundColor Green
+(Invoke-WebRequest -Uri "$baseUrl/books/popular" -UseBasicParsing).Content | ConvertFrom-Json | Select-Object -ExpandProperty data | Select-Object total
+
+Write-Host "`n✅ Backend + DB + ML tests completed!" -ForegroundColor Green
 ```
 
 **Run it:**
@@ -259,6 +403,13 @@ Write-Host "`n✅ All tests completed!" -ForegroundColor Green
 cd backend-nestjs
 .\test-api.ps1
 ```
+
+For a shorter run (login → search history → recommend → history → delete → popular only), use:
+```powershell
+.\run-remaining-tests.ps1
+```
+
+Ensure `ML_SERVICE_URL` in `.env` points to your Hugging Face Space (e.g. `https://kashifkhaan-book-recommendations.hf.space`) so health and recommendations succeed.
 
 ---
 
@@ -312,50 +463,65 @@ npm install
 
 ## ✅ Success Checklist
 
+**Setup**
 - [ ] Dependencies installed (`npm install`)
-- [ ] PostgreSQL running
-- [ ] `.env` file configured
-- [ ] Server starts without errors
-- [ ] Health check returns 200
+- [ ] PostgreSQL running (Docker or local)
+- [ ] `.env` file configured (DB + JWT + `ML_SERVICE_URL` for full tests)
+- [ ] Server starts without errors (`npm run start:dev`)
+
+**API & docs**
+- [ ] Health check returns 200 and `api: healthy`
+- [ ] With ML Space running, health shows `mlService: healthy`
 - [ ] Swagger UI accessible at `/api`
-- [ ] User registration works
-- [ ] User login works
-- [ ] JWT token authentication works
-- [ ] Protected endpoints require token
-- [ ] Search history endpoint works
+
+**Auth & user data (database)**
+- [ ] User registration works (user stored in `users` table)
+- [ ] User login works and returns token
+- [ ] JWT token authentication works (`GET /auth/me` returns user)
+- [ ] Protected endpoints return 401 without token
+
+**Search history (database)**
+- [ ] `GET /search-history` returns empty array for new user
+- [ ] After `POST /books/recommend`, search history has at least one entry
+- [ ] `DELETE /search-history/:id` and `DELETE /search-history` work
+
+**ML integration**
+- [ ] `POST /books/recommend` returns book recommendations (ML service reachable)
+- [ ] `GET /books/popular` returns popular books (no auth)
+
+**Database verification (optional)**
+- [ ] `SELECT * FROM "user"` shows registered user(s)
+- [ ] `SELECT * FROM search_history` shows entries after recommendations
 
 ---
 
 ## 📝 Next Steps After Testing
 
-1. **Test with ML Service:**
-   - Deploy ML service to Hugging Face
-   - Update `ML_SERVICE_URL` in `.env`
-   - Test book recommendations
+1. **Test Frontend Integration:**
+   - Point frontend `NEXT_PUBLIC_API_URL` to this backend
+   - Test login/register, book search, search history in the UI
 
-2. **Test Frontend Integration:**
-   - Update frontend API URL
-   - Test full authentication flow
-   - Test book search
-
-3. **Production Deployment:**
+2. **Production Deployment:**
    - Follow `DEPLOYMENT_GUIDE.md`
-   - Deploy to Render
-   - Set up production database
+   - Deploy backend to Render, DB to Render/Supabase/Railway
+   - Keep `ML_SERVICE_URL` as your Hugging Face Space (e.g. `https://kashifkhaan-book-recommendations.hf.space`)
 
 ---
 
 ## 🎯 Quick Reference
 
 ```bash
-# Start everything
+# Start DB + backend
 docker start book-recommendation-db
 cd backend-nestjs
 npm run start:dev
 
-# Test health
+# Quick tests (replace YOUR_TOKEN after register/login)
 curl http://localhost:3000/health
-
-# View API docs
-# Open: http://localhost:3000/api
+curl -X GET http://localhost:3000/auth/me -H "Authorization: Bearer YOUR_TOKEN"
+curl -X GET http://localhost:3000/search-history -H "Authorization: Bearer YOUR_TOKEN"
+curl -X POST http://localhost:3000/books/recommend -H "Authorization: Bearer YOUR_TOKEN" -H "Content-Type: application/json" -d "{\"query\":\"mystery\",\"limit\":5}"
 ```
+
+**API docs:** http://localhost:3000/api  
+**ML Space (example):** https://kashifkhaan-book-recommendations.hf.space
