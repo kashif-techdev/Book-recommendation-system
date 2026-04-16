@@ -9,13 +9,13 @@ export class BooksService {
     private searchHistoryService: SearchHistoryService,
   ) {}
 
-  async getRecommendations(request: any, userId: number) {
+  async getRecommendations(request: any, userId?: number) {
     // Get recommendations from ML service
     const recommendations =
       await this.mlIntegrationService.getRecommendations(request);
 
     // Save search history (async, don't wait)
-    if (request.query) {
+    if (userId && request.query) {
       this.searchHistoryService
         .create({
           userId,

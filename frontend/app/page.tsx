@@ -3,15 +3,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'react-hot-toast'
-import { Book, SearchFilters } from '@/lib/types'
-import { bookApi } from '@/lib/api'
+import { Book, SearchFilters, SearchHistoryItem } from '@/lib/types'
+import { bookApi, searchHistoryApi } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import Header from '@/components/ui/Header'
 import SearchBar from '@/components/ui/SearchBar'
 import BookGrid from '@/components/ui/BookGrid'
 import BookDetailsModal from '@/components/ui/BookDetailsModal'
+import SearchHistoryPanel from '@/components/ui/SearchHistoryPanel'
 import Footer from '@/components/ui/Footer'
 
 export default function Home() {
+  const { isAuthenticated } = useAuth()
   const [books, setBooks] = useState<Book[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -23,24 +26,29 @@ export default function Home() {
   const [hasSearched, setHasSearched] = useState(false)
   const [selectedBook, setSelectedBook] = useState<Book | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [history, setHistory] = useState<SearchHistoryItem[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   // Load popular books on initial load
   useEffect(() => {
     loadPopularBooks()
   }, [])
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadSearchHistory()
+    } else {
+      setHistory([])
+    }
+  }, [isAuthenticated])
+
   const loadPopularBooks = async () => {
     try {
       setIsLoading(true)
-      const response = await bookApi.getRecommendations({
-        query: '',
-        category: 'All',
-        tone: 'All',
-        limit: 12
-      })
+      const response = await bookApi.getPopularBooks()
       
       if (response.success) {
-        setBooks(response.data.books)
+        setBooks(response.data.books.slice(0, filters.limit))
         setHasSearched(false)
       }
     } catch (error) {
@@ -72,6 +80,9 @@ export default function Home() {
         setBooks(response.data.books)
         setHasSearched(true)
         toast.success(`Found ${response.data.total} book${response.data.total !== 1 ? 's' : ''}`)
+        if (isAuthenticated) {
+          loadSearchHistory()
+        }
       }
     } catch (error) {
       console.error('Search error:', error)
@@ -80,7 +91,7 @@ export default function Home() {
     } finally {
       setIsLoading(false)
     }
-  }, [filters])
+  }, [filters, isAuthenticated])
 
   const handleFilterChange = useCallback((newFilters: { category: string; tone: string }) => {
     const updatedFilters = {
@@ -101,6 +112,48 @@ export default function Home() {
     setIsModalOpen(false)
     // Small delay before clearing book to allow exit animation
     setTimeout(() => setSelectedBook(null), 300)
+  }
+
+  const loadSearchHistory = async () => {
+    try {
+      setHistoryLoading(true)
+      const response = await searchHistoryApi.getHistory()
+      if (response.success) {
+        setHistory(response.data.history)
+      }
+    } catch (error) {
+      console.error('Failed to load search history:', error)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  const handleDeleteHistoryItem = async (id: number) => {
+    try {
+      setHistoryLoading(true)
+      await searchHistoryApi.deleteById(id)
+      setHistory((prev) => prev.filter((item) => item.id !== id))
+      toast.success('History item deleted')
+    } catch (error) {
+      console.error('Failed to delete history item:', error)
+      toast.error('Failed to delete history item')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  const handleClearAllHistory = async () => {
+    try {
+      setHistoryLoading(true)
+      await searchHistoryApi.deleteAll()
+      setHistory([])
+      toast.success('Search history cleared')
+    } catch (error) {
+      console.error('Failed to clear history:', error)
+      toast.error('Failed to clear search history')
+    } finally {
+      setHistoryLoading(false)
+    }
   }
 
   const getSectionTitle = () => {
@@ -147,6 +200,15 @@ export default function Home() {
             subtitle={getSectionSubtitle()}
           />
         </section>
+
+        {isAuthenticated && (
+          <SearchHistoryPanel
+            history={history}
+            loading={historyLoading}
+            onDeleteOne={handleDeleteHistoryItem}
+            onClearAll={handleClearAllHistory}
+          />
+        )}
 
         {/* Features Section - More Subtle */}
         <section className="py-12 md:py-16 bg-gradient-to-b from-transparent to-gray-50/50">

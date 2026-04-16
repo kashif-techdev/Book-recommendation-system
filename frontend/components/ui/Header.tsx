@@ -33,9 +33,9 @@ export default function Header() {
         {isAuthenticated ? (
           <>
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-white/80 backdrop-blur-sm rounded-lg text-sm text-gray-700">
-              {user?.profile_picture ? (
+              {user?.profilePicture ? (
                 <img 
-                  src={user.profile_picture} 
+                  src={user.profilePicture} 
                   alt={user.username}
                   className="w-6 h-6 rounded-full"
                 />

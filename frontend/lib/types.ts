@@ -47,12 +47,22 @@ export interface SearchFilters {
   limit: number
 }
 
+export interface SearchHistoryItem {
+  id: number
+  userId: number
+  query: string | null
+  category: string | null
+  tone: string | null
+  resultsCount: number
+  createdAt: string
+}
+
 export interface User {
   id: number
   username: string
   email: string
-  profile_picture?: string
-  created_at?: string
+  profilePicture?: string | null
+  createdAt?: string
 }
 
 export interface AuthResponse {
