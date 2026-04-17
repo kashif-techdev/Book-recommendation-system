@@ -142,7 +142,7 @@ The backend supports **DATABASE_URL** (single connection string). If you use ano
 | **Region** | Same as your PostgreSQL (e.g. Oregon or Frankfurt) |
 | **Root Directory** | `backend-nestjs` |
 | **Environment** | `Node` |
-| **Build Command** | `npm install && npm run build` |
+| **Build Command** | `npm install --include=dev && npm run build` |
 | **Start Command** | `npm run start:prod` |
 
 - **Root Directory** must be `backend-nestjs` so Render runs all commands inside that folder and only redeploys when files there change.
@@ -176,6 +176,9 @@ If you use another provider without a single URL, set **DB_HOST**, **DB_PORT**, 
 1. Click **"Create Web Service"**.
 2. Wait for the build (install + `npm run build`) and deploy.
 3. Copy your service URL (e.g. `https://book-recommendation-backend.onrender.com`).
+
+If Render logs show `sh: 1: nest: not found`, it means Nest CLI was unavailable during build.  
+Use the build command above (`npm install --include=dev && npm run build`) so dev dependencies (including `@nestjs/cli`) are present.
 
 ### Step 7: Verify deployment
 
