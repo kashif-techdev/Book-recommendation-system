@@ -93,7 +93,7 @@ export default function Home() {
     }
   }, [filters, isAuthenticated])
 
-  const handleFilterChange = useCallback((newFilters: { category: string; tone: string }) => {
+  const handleFilterChange = useCallback((newFilters: Pick<SearchFilters, 'category' | 'tone'>) => {
     const updatedFilters = {
       ...filters,
       ...newFilters

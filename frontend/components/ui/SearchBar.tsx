@@ -3,10 +3,11 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Search, Filter, Sparkles } from 'lucide-react'
+import { Category, SearchFilters, Tone } from '@/lib/types'
 
 interface SearchBarProps {
   onSearch: (query: string) => void
-  onFilterChange: (filters: { category: string; tone: string }) => void
+  onFilterChange: (filters: Pick<SearchFilters, 'category' | 'tone'>) => void
   isLoading?: boolean
   placeholder?: string
 }
@@ -18,8 +19,8 @@ export default function SearchBar({
   placeholder = "Describe a book you'd like to read..."
 }: SearchBarProps) {
   const [query, setQuery] = useState('')
-  const [category, setCategory] = useState('All')
-  const [tone, setTone] = useState('All')
+  const [category, setCategory] = useState<Category>('All')
+  const [tone, setTone] = useState<Tone>('All')
   const [showFilters, setShowFilters] = useState(false)
 
   const categories = ['All', 'Fiction', 'Nonfiction', "Children's Fiction", "Children's Nonfiction"]
@@ -30,12 +31,12 @@ export default function SearchBar({
     // No automatic search - user must click search button
   }
 
-  const handleCategoryChange = (value: string) => {
+  const handleCategoryChange = (value: Category) => {
     setCategory(value)
     onFilterChange({ category: value, tone })
   }
 
-  const handleToneChange = (value: string) => {
+  const handleToneChange = (value: Tone) => {
     setTone(value)
     onFilterChange({ category, tone: value })
   }
@@ -125,7 +126,7 @@ export default function SearchBar({
               </label>
               <select
                 value={category}
-                onChange={(e) => handleCategoryChange(e.target.value)}
+                onChange={(e) => handleCategoryChange(e.target.value as Category)}
                 aria-label="Select book category"
                 className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white hover:border-gray-300 cursor-pointer"
               >
@@ -144,7 +145,7 @@ export default function SearchBar({
               </label>
               <select
                 value={tone}
-                onChange={(e) => handleToneChange(e.target.value)}
+                onChange={(e) => handleToneChange(e.target.value as Tone)}
                 aria-label="Select emotional tone"
                 className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white hover:border-gray-300 cursor-pointer"
               >
