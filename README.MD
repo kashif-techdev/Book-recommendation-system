@@ -15,8 +15,13 @@ Instead of using traditional keyword-based methods, this system converts book de
 - Applies zero-shot classification to tag books with relevant topics.
 - Analyzes sentiment and emotions from descriptions to enrich recommendations.
 - Includes a simple UI to interact with the system and explore recommendations.
-
 ---
+
+## deployement 
+- next js front end on vercel
+- nestjs  backend on render 
+- postgreSQL on supabase
+- ML Services on Hugging Face
 
 ## 🧠 Tools & Technologies
 
