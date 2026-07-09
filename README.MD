@@ -43,7 +43,7 @@ Instead of using traditional keyword-based methods, this system converts book de
 4. Build a vector database to enable fast similarity searches.
 5. Classify books into topics using zero-shot learning.
 6. Analyze emotional tone in descriptions using fine-tuned models.
-7. and then sent the data to front-end from backend through flask api .
+7. and then sent the data to front-end from backend through flask api (now we are using Fast APi for concurrency and parrellel processing so that multiple users can access the books at same time) .
 
 ---
 
